@@ -1,0 +1,22 @@
+# Git and IDE configurations
+.git
+.gitignore
+.vscode
+.idea
+
+# Python cache & compiled files
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+
+# Virtual environments
+venv
+.venv
+env
+
+# SDLC Agent Framework internal assets (security isolation)
+.agents
+plans
+reports
