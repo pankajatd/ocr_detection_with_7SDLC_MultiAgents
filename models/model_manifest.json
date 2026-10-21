@@ -1,0 +1,18 @@
+{
+  "system_name": "Universal OCR & Vehicle Plate Recognition Engine",
+  "detection_model": {
+    "architecture": "CRAFT (Character Region Awareness for Text Detection)",
+    "weights_filename": "craft_mlt_25k.pth",
+    "parameters": 83152330,
+    "input_channels": 3,
+    "feature_representation": "Character Affinity & Heatmap Maps"
+  },
+  "recognition_model": {
+    "architecture": "ResNet-CRNN with CTC Loss",
+    "weights_filename": "english_g2.pth",
+    "parameters": 15143997,
+    "vocabulary": "Alphanumeric English (Alphanumeric Case-Insensitive)",
+    "sequence_length": 256
+  },
+  "cache_directory": "~/.EasyOCR/model/"
+}
