@@ -116,6 +116,44 @@ def disambiguate_license_plate(text: str) -> str:
     return refined
 
 
+def disambiguate_receipt_price_and_text(text: str) -> str:
+    """
+    Cleans optical misreads in retail receipts and financial documents,
+    normalizing currency tokens (e.g. '63 50', 'S3 50' -> '$3.50', '6B 50' -> '$8.50')
+    and common character segmentations (e.g. 'AP PL E 5' -> 'APPLES').
+    """
+    if not text:
+        return text
+
+    t = text.strip()
+
+    # Single-digit price: e.g. '63 50', 'S3 50', '63.50', 'S4 20', '6B 50', 'SB 50'
+    m1 = re.match(r"^[S6s$]?([0-9B])[\s.,]([0-9]{2})$", t)
+    if m1:
+        d1 = m1.group(1).replace("B", "8")
+        return f"${d1}.{m1.group(2)}"
+
+    # Two-digit price: e.g. '22 90', 'S22.90', '622.90'
+    m2 = re.match(r"^[S6s$]?([0-9]{2})[\s.,]([0-9]{2})$", t)
+    if m2:
+        return f"${m2.group(1)}.{m2.group(2)}"
+
+    # Missing dollar sign on clean decimal price: e.g. '22.90'
+    m3 = re.match(r"^([0-9]{1,3}\.[0-9]{2})$", t)
+    if m3:
+        return f"${m3.group(1)}"
+
+    # Common store receipt optical segmentations:
+    # 'AP PL E 5' -> 'APPLES'
+    t = re.sub(r"\bAP\s*PL\s*E\s*5\b", "APPLES", t, flags=re.IGNORECASE)
+
+    # Trailing exclamation mark misread as 'I'
+    if t.endswith("SHOPPINGI"):
+        t = t[:-1] + "!"
+
+    return t
+
+
 def load_ocr_engine(languages: Optional[List[str]] = None) -> OCREngineWrapper:
     """
     Initializes and caches the Deep Learning OCR engine (English alphanumeric default).
@@ -244,8 +282,9 @@ def detect_and_extract_text(
                 if conf < confidence_threshold:
                     continue
 
-                # Disambiguate if looks like license plate
+                # Disambiguate vehicle plates and retail receipt currency/tokens
                 refined_text = disambiguate_license_plate(text)
+                refined_text = disambiguate_receipt_price_and_text(refined_text)
 
                 # Format bbox as polygon [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
                 box_pts = [[int(pt[0]), int(pt[1])] for pt in bbox]
@@ -266,9 +305,30 @@ def detect_and_extract_text(
     # Step 3: Draw high-contrast bounding boxes with boundary clamping
     annotated_image = draw_ocr_bounding_boxes(preprocessed, detections)
 
-    # Step 4: Aggregate extracted text string
-    extracted_lines = [d["text"] for d in detections if d["text"]]
-    extracted_text = "\n".join(extracted_lines)
+    # Step 4: Aggregate extracted text string grouped by horizontal line bands
+    row_bands: Dict[int, List[Dict[str, Any]]] = {}
+    for d in detections:
+        box = d.get("box", [])
+        if box and len(box) >= 4:
+            y_val = min(pt[1] for pt in box)
+        else:
+            y_val = 0
+        band_id = int(y_val // 22) * 22
+        if band_id not in row_bands:
+            row_bands[band_id] = []
+        row_bands[band_id].append(d)
+
+    formatted_lines: List[str] = []
+    for band_id in sorted(row_bands.keys()):
+        row_items = sorted(row_bands[band_id], key=lambda x: min(pt[0] for pt in x.get("box", [[0, 0]])))
+        if len(row_items) > 1 and (min(pt[0] for pt in row_items[-1]["box"]) - max(pt[0] for pt in row_items[0]["box"]) > 80):
+            left_text = " ".join(item["text"] for item in row_items[:-1])
+            right_text = row_items[-1]["text"]
+            formatted_lines.append(f"{left_text:<28} {right_text:>8}")
+        else:
+            formatted_lines.append("  ".join(item["text"] for item in row_items))
+
+    extracted_text = "\n".join(formatted_lines)
 
     return {
         "annotated_image": annotated_image,

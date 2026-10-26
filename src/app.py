@@ -62,28 +62,28 @@ def generate_synthetic_demo_image(demo_type: str) -> np.ndarray:
         return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     elif demo_type == "store_receipt":
-        # Thermal Paper Store Receipt
+        # Thermal Paper Store Receipt (High-Contrast Clean Geometry)
         img = np.full((520, 420, 3), 250, dtype=np.uint8)
         cv2.rectangle(img, (15, 15), (405, 505), (230, 230, 230), 2)
-        cv2.putText(img, "SUPERMARKET EXPRESS", (60, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (20, 20, 20), 2)
+        cv2.putText(img, "SUPERMARKET EXPRESS", (50, 55), cv2.FONT_HERSHEY_DUPLEX, 0.75, (15, 15, 15), 2)
         cv2.putText(img, "------------------------------------", (30, 85), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
         items = [
             ("MILK 1L", "$3.50"),
             ("ORGANIC EGGS", "$4.20"),
             ("SOURDOUGH BREAD", "$3.80"),
-            ("APPLES 1KG", "$2.90"),
+            ("FRESH APPLES 1KG", "$2.90"),
             ("COFFEE BEANS", "$8.50"),
         ]
         y = 125
         for item, price in items:
-            cv2.putText(img, item, (35, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (30, 30, 30), 1)
-            cv2.putText(img, price, (320, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (30, 30, 30), 1)
-            y += 40
+            cv2.putText(img, item, (35, y), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (15, 15, 15), 2)
+            cv2.putText(img, price, (320, y), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (15, 15, 15), 2)
+            y += 42
         cv2.putText(img, "------------------------------------", (30, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
         y += 45
-        cv2.putText(img, "TOTAL AMOUNT:", (35, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (10, 10, 10), 2)
-        cv2.putText(img, "$22.90", (315, y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (10, 10, 10), 2)
-        cv2.putText(img, "THANK YOU FOR SHOPPING!", (75, 480), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (80, 80, 80), 1)
+        cv2.putText(img, "TOTAL AMOUNT:", (35, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (10, 10, 10), 2)
+        cv2.putText(img, "$22.90", (315, y), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (10, 10, 10), 2)
+        cv2.putText(img, "THANK YOU FOR SHOPPING!", (65, 480), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (40, 40, 40), 1)
         return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
     elif demo_type == "printed_document":
@@ -269,7 +269,9 @@ def main():
 
         extracted_text = results.get("extracted_text", "")
         if extracted_text:
-            st.text_area("Extracted Characters", value=extracted_text, height=180)
+            num_lines = len(extracted_text.split("\n"))
+            view_height = max(260, min(650, num_lines * 28 + 40))
+            st.text_area("Extracted Characters", value=extracted_text, height=view_height)
 
             # Export Formats
             txt_data = format_export_data(detections, "txt")
