@@ -34,30 +34,70 @@ class OCREngineWrapper:
         return self.engine_type == "deep_learning"
 
 
+# Official Indian State & Union Territory Vehicle Registration Codes (Motor Vehicles Act)
+INDIAN_STATE_CODES = {
+    "AN", "AP", "AR", "AS", "BR", "CG", "CH", "DD", "DL", "DN",
+    "GA", "GJ", "HP", "HR", "JH", "JK", "KA", "KL", "LA", "LD",
+    "MH", "ML", "MN", "MP", "MZ", "NL", "OD", "PB", "PY", "RJ",
+    "SK", "TN", "TR", "TS", "UK", "UP", "WB",
+}
+
+
 def disambiguate_license_plate(text: str) -> str:
     """
     Applies contextual disambiguation for vehicle registration / license plates.
-    e.g., resolving '0' vs 'O', '1' vs 'I', '8' vs 'B' based on plate regex schemas.
+    e.g., resolving '0' vs 'O', '1' vs 'I', '8' vs 'B' based on plate regex schemas,
+    and ensuring state codes (such as 'MH' for Maharashtra) and registration strings
+    are strictly and accurately capitalized (e.g., resolving optical 'Mh' or 'mh' to 'MH').
     """
-    cleaned = text.strip().upper()
-    compact = re.sub(r"[^A-Z0-9]", "", cleaned)
+    if not text:
+        return text
 
-    # Standard Indian Plate Pattern: 2 Letters (State) + 2 Digits (RTO) + 1-2 Letters + 4 Digits
-    # Example: MH12AB1234 or DL01A1234
+    cleaned = text.strip()
+    upper_cleaned = cleaned.upper()
+    compact = re.sub(r"[^A-Z0-9]", "", upper_cleaned)
+
+    # 1. Standalone Indian State Code check (e.g., "MH", "Mh", "mh", "DL", "dl", "KA", "ka")
+    if compact in INDIAN_STATE_CODES:
+        return compact
+
+    # 2. Standard Indian Plate Pattern: 2 Letters (State) + 2 Digits (RTO) + 1-2 Letters + 4 Digits
+    # Example: MH12AB1234, DL01A1234, Mh 12 ab 1234
     ind_match = re.match(r"^([A-Z0-9]{2})([A-Z0-9]{2})([A-Z0-9]{1,2})([A-Z0-9]{4})$", compact)
     if ind_match:
         p1, p2, p3, p4 = ind_match.groups()
-        # p1: State (Letters)
+        # p1: State (Letters) - e.g. MH, DL
         p1 = p1.replace("0", "O").replace("1", "I").replace("8", "B").replace("5", "S")
-        # p2: RTO code (Digits)
+        # p2: RTO code (Digits) - e.g. 12, 01
         p2 = p2.replace("O", "0").replace("I", "1").replace("Z", "2").replace("S", "5").replace("B", "8")
-        # p3: Series (Letters)
+        # p3: Series (Letters) - e.g. AB
         p3 = p3.replace("0", "O").replace("1", "I").replace("8", "B").replace("5", "S")
-        # p4: Unique Number (Digits)
+        # p4: Unique Number (Digits) - e.g. 1234
         p4 = p4.replace("O", "0").replace("I", "1").replace("Z", "2").replace("S", "5").replace("B", "8")
         return f"{p1} {p2} {p3} {p4}"
 
-    # UK Plate Pattern: 2 Letters (Memory tag) + 2 Digits (Age) + 3 Letters
+    # 3. Two-line Indian Plate Header Pattern: State (2 Letters) + RTO Code (2 Digits)
+    # Example: "MH 12", "Mh 12", "MH-12", "Mh12"
+    ind_prefix_match = re.match(r"^([A-Z0-9]{2})([A-Z0-9]{2})$", compact)
+    if ind_prefix_match:
+        p1, p2 = ind_prefix_match.groups()
+        p1 = p1.replace("0", "O").replace("1", "I").replace("8", "B").replace("5", "S")
+        p2 = p2.replace("O", "0").replace("I", "1").replace("Z", "2").replace("S", "5").replace("B", "8")
+        if p1 in INDIAN_STATE_CODES or p2.isdigit():
+            return f"{p1} {p2}"
+
+    # 4. Partial Indian Plate Pattern (e.g. "DL 01 AB 78" or short series):
+    ind_short_match = re.match(r"^([A-Z0-9]{2})([A-Z0-9]{2})([A-Z0-9]{1,2})([A-Z0-9]{1,3})$", compact)
+    if ind_short_match:
+        p1, p2, p3, p4 = ind_short_match.groups()
+        p1 = p1.replace("0", "O").replace("1", "I").replace("8", "B").replace("5", "S")
+        p2 = p2.replace("O", "0").replace("I", "1").replace("Z", "2").replace("S", "5").replace("B", "8")
+        p3 = p3.replace("0", "O").replace("1", "I").replace("8", "B").replace("5", "S")
+        p4 = p4.replace("O", "0").replace("I", "1").replace("Z", "2").replace("S", "5").replace("B", "8")
+        if p1 in INDIAN_STATE_CODES:
+            return f"{p1} {p2} {p3} {p4}"
+
+    # 5. UK Plate Pattern: 2 Letters (Memory tag) + 2 Digits (Age) + 3 Letters
     # Example: BD51 SMR
     uk_match = re.match(r"^([A-Z0-9]{2})([A-Z0-9]{2})([A-Z0-9]{3})$", compact)
     if uk_match:
@@ -67,7 +107,13 @@ def disambiguate_license_plate(text: str) -> str:
         p3 = p3.replace("0", "O").replace("1", "I")
         return f"{p1}{p2} {p3}"
 
-    return text
+    # 6. Normalize any state code prefix (e.g., "Mh", "mh" -> "MH") in general alphanumeric tokens
+    refined = re.sub(r"\b[mM][hH](?=[\s\-_0-9]|$)", "MH", cleaned)
+    for code in INDIAN_STATE_CODES:
+        pattern = r"\b" + code[0] + r"[" + code[1].lower() + code[1].upper() + r"](?=[\s\-_0-9]|$)"
+        refined = re.sub(pattern, code, refined)
+
+    return refined
 
 
 def load_ocr_engine(languages: Optional[List[str]] = None) -> OCREngineWrapper:

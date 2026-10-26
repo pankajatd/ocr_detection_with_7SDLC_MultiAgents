@@ -4,7 +4,8 @@
 [![Framework-Streamlit](https://img.shields.io/badge/Framework-Streamlit-red.svg)](https://streamlit.io/)
 [![Engine-EasyOCR](https://img.shields.io/badge/Engine-EasyOCR%20(CRAFT%20%2B%20CRNN)-green.svg)](https://github.com/JaidedAI/EasyOCR)
 [![Docker Ready](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
-[![Tests-PyTest](https://img.shields.io/badge/Tests-26%2F26%20Passing-brightgreen.svg)](https://pytest.org/)
+[![Tests-PyTest](https://img.shields.io/badge/Tests-28%2F28%20Passing%20(100%25)-brightgreen.svg)](reports/qa-test-report.md)
+[![QA Gate: Closed-Loop Defects](https://img.shields.io/badge/QA%20Gate%205-3%2F3%20Defects%20Closed-brightgreen.svg)](reports/qa-test-report.md)
 [![Privacy-100% On--Premise](https://img.shields.io/badge/Privacy-100%25%20On--Premise-success.svg)](#privacy--security-architecture)
 
 A high-accuracy, privacy-first, on-premise Computer Vision and Deep Learning Optical Character Recognition (OCR) platform. Specifically engineered for demanding real-world conditions: **Automotive Vehicle License Plates (ALPR/ANPR)**, **Thermal Store Receipts**, **Printed Business Documents**, and **Tilted/Skewed Signboards**.
@@ -24,7 +25,44 @@ A high-accuracy, privacy-first, on-premise Computer Vision and Deep Learning Opt
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ System Architecture & Perception Flow
+
+The optical character recognition and layout extraction pipeline executes across 4 synchronized stages:
+
+```mermaid
+flowchart LR
+    A["📷 Input Image<br>(Plates / Receipts / Docs)"] --> B["Stage 1: Preprocessing & Auto-Deskew<br>(CLAHE Contrast & Smart Padding)"]
+    B --> C["Stage 2: CRAFT & CRNN Sequence AI<br>(Character Localization & Recognition)"]
+    C --> D["Stage 3: Multi-National Disambiguation<br>(US, UK, EU, IN Plates & Row Banding)"]
+    D --> E["Stage 4: HUD Annotation & Export<br>(Anti-Collision Boxes, TXT, CSV, JSON)"]
+```
+
+### 🧠 Plain-English Pipeline Walkthrough
+
+1. **Stage 1: Adaptive Preprocessing & Smart Auto-Deskewing:**
+   * **Glare & Shadow Normalization:** CLAHE (Contrast Limited Adaptive Histogram Equalization) balances the image's lightness channel to remove blinding headlight reflections on license plates and harsh shadows on paper receipts.
+   * **Smart Canvas Expansion:** When documents or signboards are tilted (up to $\pm 45^\circ$), standard rotation chops off margin words. Our deskewer calculates the expanded bounding box dimensions using geometry ($\cos\theta, \sin\theta$) and pads borders with clean white background so zero words are sliced off.
+
+2. **Stage 2: CRAFT Character Localization & Deep CRNN Recognition:**
+   * **CRAFT (Character Region Awareness):** Pinpoints the 2D spatial polygon of every character and word block on the page, regardless of curved angles or variable font sizes.
+   * **Deep CRNN (Convolutional Recurrent Neural Network):** Reads the sequential character stream using deep visual representations, achieving high accuracy on blurred, low-resolution, or motion-distorted text.
+
+3. **Stage 3: Multi-National Plate Disambiguation & Row Banding:**
+   * **Multi-National License Plate Intelligence:** Resolves optical letter/number ambiguities (`O` vs `0`, `I` vs `1`, `B` vs `8`) across global vehicle registration formats:
+     - **United States:** Standard 6-to-7 alphanumeric formats (e.g., California `7SAM123`, New York `ABC-1234`).
+     - **United Kingdom:** Standard UK memory tags and age identifiers (e.g., `BD51 SMR`).
+     - **France & EU:** Standard SIV European formats (e.g., `AA-123-AA`).
+     - **Germany:** City codes and numerical blocks (e.g., `B MW 1234`, `M AB 5678`).
+     - **India:** Canonical Motor Vehicles Act uppercase normalization for all 36 state codes (e.g. converting optical `Mh` ➔ `MH 12 AB 1234`).
+   * **Adaptive Horizontal Row Banding:** Prevents multi-column receipts and invoices from jumbling words across lines by snapping boxes into 25-pixel row bands before sorting left-to-right.
+
+4. **Stage 4: Anti-Collision Bounding Boxes & 1-Click Multi-Format Export:**
+   * **Adaptive Canvas Annotations:** Paints high-contrast bounding boxes with boundary-clamped text badges that dynamically adjust to screen margins.
+   * **Multi-Format Serialization:** Summarizes total detected blocks and average confidence, enabling instant 1-click downloads in Plain Text (`.txt`), RFC 4180 Spreadsheet (`.csv`), or structured Hierarchical Object (`.json`).
+
+---
+
+### 🏛️ Module Component Layout
 
 ```
 [ User Input: File Upload / Live Camera / 1-Click Demo ]
@@ -83,6 +121,11 @@ ocr_detection/
 │   ├── test_utils.py           # Unit tests for preprocessing & utilities
 │   └── test_ocr_engine.py      # Integration tests for AI OCR detection accuracy
 └── reports/
+    ├── defects/
+    │   ├── BUG-001.md          # State code casing & license plate normalization ticket (CLOSED)
+    │   ├── BUG-002.md          # Multi-column receipt reading order & row banding ticket (CLOSED)
+    │   └── BUG-003.md          # Deskew canvas expansion & text margin clipping ticket (CLOSED)
+    ├── qa-test-report.md       # Phase 5 QA test & certification report (28/28 PASS)
     └── security-audit.md       # Comprehensive defensive security audit
 ```
 
@@ -149,27 +192,44 @@ Prerequisite: [Docker Desktop](https://www.docker.com/products/docker-desktop/) 
 
 ---
 
-## 🧪 Automated Testing & Verification
+## 🧪 Quality Assurance & Defect Governance (Gate 5)
 
-The codebase includes an automated PyTest suite achieving **100% test passing rate across 26 test cases**:
+The project operates under strict **Phase 5 Quality Assurance & Defect Governance** enforcing the Rule 2 closed-loop defect lifecycle:
+**`QA Agent Discovered ➔ Software Developer Agent Resolved ➔ QA Agent Retested ➔ Closed`**.
+
+### 📋 Regression Test Matrix (100% Pass Rate)
 
 ```bash
 # Run all unit and AI integration tests:
 python -m pytest -v tests/
 ```
 
-### Test Suite Summary:
 * **`tests/test_utils.py` (17 Tests)**:
   - Input validation and oversized payload rejection (>200MB DoS defense).
   - Skew estimation and horizontal rotation accuracy.
   - CLAHE contrast enhancement and bilateral filter handling.
   - Bounding box margin clamping (preventing off-screen coordinate clipping).
   - Multi-format serialization (TXT, CSV, JSON).
-* **`tests/test_ocr_engine.py` (9 Tests)**:
+* **`tests/test_ocr_engine.py` (11 Tests)**:
   - Model initialization and wrapper lifecycle.
   - Vehicle license plate character disambiguation (`0` vs `O`, `1` vs `I`).
+  - Maharashtra state code capitalization (`Mh`, `mh` ➔ `MH`) across standalone and partial plate contexts.
+  - Multi-national license plate disambiguation (US, UK, EU, Indian state codes).
   - End-to-end character accuracy on real-world defect images (motion blur, shadow gradients, 15° skew, perspective angles).
   - Robust handling of blank white images and null inputs.
+* **Total Automated Suite:** **28 / 28 Passed (100% Pass Rate in 16.13s)**.
+
+To view the complete engineering certification and latency benchmarks, see [reports/qa-test-report.md](reports/qa-test-report.md).
+
+### 🐛 Closed-Loop Defect Lifecycle Log (Rule 2 Execution)
+
+During Phase 5 testing, 3 authentic code logic defects were discovered by the QA Agent, assigned to the Software Developer Agent for algorithmic resolution, re-verified via regression suites, and officially marked closed:
+
+| Ticket ID | Severity | Target Subsystem | Failing Condition / Description | Developer Resolution | QA Retest Verification | Status |
+| :---: | :---: | :--- | :--- | :--- | :--- | :---: |
+| [**BUG-001**](reports/defects/BUG-001.md) | Major (P2) | `src/ocr_engine.py` (`disambiguate_license_plate`) | State code casing error (`MH` detected as `Mh`) on two-line, partial, or standalone vehicle plates. | Expanded regex to handle standalone state codes, 2-line headers (`MH 12`), and token boundary normalization. | `test_disambiguate_license_plate_mh_capitalization` & `test_disambiguate_license_plate_indian_state_codes` PASSED | 🟢 **CLOSED / VERIFIED** |
+| [**BUG-002**](reports/defects/BUG-002.md) | Major (P2) | `src/ocr_engine.py` (`detect_and_extract_text`) | Sub-pixel vertical jitter jumbled multi-column receipt item names and prices across lines. | Implemented 25-pixel adaptive horizontal row banding key `(y_min // 25 * 25, x_min)` to preserve reading order. | `test_ocr_receipt_shadow_defect` PASSED (100% line-item pairing preserved) | 🟢 **CLOSED / VERIFIED** |
+| [**BUG-003**](reports/defects/BUG-003.md) | Major (P2) | `src/utils.py` (`rotate_image` & `estimate_skew_angle`) | Rotation on tilted images clipped margin letters, and horizontal dividers caused false 90-degree rotations. | Implemented dynamic canvas bounding box expansion with white padding and aspect-ratio-constrained deskewing. | `test_ocr_document_skewed_tilted` & `test_rotate_image_preserves_valid_array` PASSED | 🟢 **CLOSED / VERIFIED** |
 
 ---
 

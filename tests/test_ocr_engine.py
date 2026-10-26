@@ -67,6 +67,35 @@ def test_disambiguate_license_plate_resolves_letters():
     assert "DL 01 AB 1234" == corrected
 
 
+def test_disambiguate_license_plate_mh_capitalization():
+    """
+    Verifies that optical character recognition ambiguities for Maharashtra state code
+    ('Mh', 'mh', 'mH') are strictly and accurately normalized to uppercase 'MH',
+    both in standalone tokens, prefixed plates, and full registration strings.
+    """
+    assert disambiguate_license_plate("Mh") == "MH"
+    assert disambiguate_license_plate("mh") == "MH"
+    assert disambiguate_license_plate("mH") == "MH"
+    assert disambiguate_license_plate("MH") == "MH"
+    assert disambiguate_license_plate("Mh 12") == "MH 12"
+    assert disambiguate_license_plate("mh 12") == "MH 12"
+    assert disambiguate_license_plate("Mh-12") == "MH 12"
+    assert disambiguate_license_plate("Mh12") == "MH 12"
+    assert disambiguate_license_plate("Mh 12 AB 1234") == "MH 12 AB 1234"
+    assert disambiguate_license_plate("mh 12 ab 1234") == "MH 12 AB 1234"
+
+
+def test_disambiguate_license_plate_indian_state_codes():
+    """
+    Verifies that various Indian state codes with mixed case or spacing
+    resolve cleanly to official uppercase format.
+    """
+    assert disambiguate_license_plate("Dl 01") == "DL 01"
+    assert disambiguate_license_plate("Ka 03") == "KA 03"
+    assert disambiguate_license_plate("Hr 26") == "HR 26"
+    assert disambiguate_license_plate("DL 01 AB 78") == "DL 01 AB 78"
+
+
 # ==========================================
 # 3. Real Benchmark Images AI OCR Accuracy Tests
 # ==========================================
