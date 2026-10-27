@@ -237,3 +237,41 @@ The test suite guarantees that all utility functions, AI character recognition p
 | **Feature 10** | Dual-pane side-by-side comparison | `src/app.py` &rarr; `st.columns(2)` |
 | **Feature 11** | Multi-format export (TXT, CSV, JSON) | `src/utils.py` &rarr; `format_export_data()` & `st.download_button()` |
 | **Quality Gate**| Automated verification across unit and real defect images | `tests/test_utils.py`, `tests/test_ocr_engine.py` &rarr; 26/26 PyTests |
+
+---
+
+## 6. Defensive Security Architecture & Vulnerability Mitigations (Phase 6 Alignment)
+
+To guarantee 100% on-premise document confidentiality, financial data privacy, and robust cyber-defense, the system embeds six defense-in-depth security layers:
+
+### 6.1 Ephemeral In-Memory Processing & Zero Disk Retention (GDPR & Confidentiality)
+* **Threat Model:** Sensitive business documents (receipts, purchase orders, confidential invoices, license plates) leaking to persistent disk storage or tmp caches.
+* **Architectural Defense:**
+  - 100% volatile RAM execution: All uploads and camera captures are processed in-memory via `io.BytesIO`.
+  - Zero disk writes: No user images or extracted texts are written to `/tmp`, logs, or local storage.
+  - Generational garbage collection automatically recycles image buffers upon request completion.
+
+### 6.2 Denial-of-Service (DoS) & Decompression Bomb Ingestion Defense
+* **Threat Model:** Oversized file payloads or crafted pixel bombs exhausting server RAM.
+* **Architectural Defense:**
+  - Enforced 200MB maximum buffer limit in `validate_image_bytes()`.
+  - Two-phase PIL verification (`img.verify()` followed by `img.load()`) checks pixel integrity and aborts invalid streams before passing them to neural network decoders.
+
+### 6.3 Arbitrary Code Execution (ACE) & Shell Injection Elimination
+* **Threat Model:** Malicious filenames or metadata triggering OS command execution.
+* **Architectural Defense:**
+  - Zero dynamic code execution: zero `eval()`, `exec()`, `os.system()`, or `subprocess` calls across `src/`.
+  - All character recognition, deskewing, and CLAHE enhancements run purely within local in-memory PyTorch/OpenCV matrix buffers.
+
+### 6.4 Mathematical Coordinate Clamping & Buffer Bounds Safety
+* **Threat Model:** Boundary text coordinates (e.g. at $(0, 0)$ or $(W, H)$) causing out-of-bounds drawing exceptions or array slicing panics.
+* **Architectural Defense:**
+  - `draw_ocr_bounding_boxes()` enforces rigorous clamping: `startX = max(0, min(w, startX))` and `startY = max(0, min(h, startY))`.
+
+### 6.5 CSV & Tabular Formula Injection (DDE) Sanitization
+* **Threat Model:** Extracted text from invoices or receipts containing formulas (e.g. `=SUM(...)` or `=cmd|...`) that trigger Excel DDE execution on manager laptops.
+* **Architectural Defense:**
+  - `format_export_data()` escapes and sanitizes exported tabular fields, ensuring Excel displays strings safely as inert text.
+
+### 6.6 Zero-Telemetry Supply Chain Guarantee
+* Zero outbound HTTP/WebSocket clients (`requests`, `urllib`, `socket`). Deep learning OCR weights load exclusively from the verified local cache (`~/.EasyOCR`). All pinned dependencies are verified free of known vulnerabilities.
